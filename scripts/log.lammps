@@ -1,0 +1,154 @@
+LAMMPS (19 Nov 2024)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:99)
+  using 1 OpenMP thread(s) per MPI task
+Loaded 1 plugins from E:\Masteral\LAMMPS\LAMMPS 64-bit 19Nov2024\plugins
+# in.production.lammps
+# Production run on the solvated polymer system (e.g., cyclic loading).
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      bond
+
+special_bonds   lj 0 1 1
+
+# Define pair style BEFORE reading data
+pair_style      lj/cut 1.12246
+bond_style      fene
+
+# Read the solvated configuration FIRST
+read_data       C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\data\solvated_polymer_data.dat
+Reading data file ...
+  orthogonal box = (0 0 0) to (30 30 30)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  1100 atoms
+  reading velocities ...
+  1100 velocities
+  scanning bonds ...
+  1 = max bonds/atom
+  orthogonal box = (0 0 0) to (30 30 30)
+  1 by 1 by 1 MPI processor grid
+  reading bonds ...
+  99 bonds
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0        1        1       
+  special bond factors coul:  0        0        0       
+     2 = max # of 1-2 neighbors
+     2 = max # of 1-3 neighbors
+     4 = max # of 1-4 neighbors
+     6 = max # of special neighbors
+  special bonds CPU = 0.004 seconds
+  read_data CPU = 0.045 seconds
+
+# Define bond coefficients AFTER reading the simulation box
+bond_coeff      1 30.0 1.5 1.0 1.0
+
+# Define pair coefficients for polymer-polymer, solvent-solvent, and polymer-solvent
+pair_coeff      1 1 1.0 1.0 1.12246
+pair_coeff      2 2 1.0 1.0 1.12246
+pair_coeff      1 2 1.0 1.0 1.12246
+
+# Fix communication cutoff issue (increase to 1.8)
+comm_modify cutoff 1.8
+
+neighbor        0.3 bin
+neigh_modify    delay 5 every 1 check yes
+
+# -------------------- OUTPUT TO RESULTS FOLDER --------------------
+
+# Define output directory
+variable results_dir string "C:/Users/monica/Desktop/lammps_tutorial/polymer_cyclic_loading/results"
+
+# Compute End-to-End Distance for Polymer Chains
+compute end2end all bond/local dist
+fix ave_end all ave/histo 100 10 1000 0.0 10.0 100 c_end2end mode vector file ${results_dir}/end_to_end_distribution.txt
+fix ave_end all ave/histo 100 10 1000 0.0 10.0 100 c_end2end mode vector file C:/Users/monica/Desktop/lammps_tutorial/polymer_cyclic_loading/results/end_to_end_distribution.txt
+
+# Compute Radius of Gyration (Rg)
+compute rg all gyration
+fix ave_rg all ave/time 100 10 1000 c_rg file ${results_dir}/radius_of_gyration.txt mode vector
+fix ave_rg all ave/time 100 10 1000 c_rg file C:/Users/monica/Desktop/lammps_tutorial/polymer_cyclic_loading/results/radius_of_gyration.txt mode vector
+
+# Compute Global Stress Tensor for Rheology Analysis (Fix Variable Issue)
+compute temp_all all temp                      # Define temperature compute
+compute press all pressure temp_all            # Use temp_all for pressure calculation
+variable pxy equal c_press[4]                  # Extract Pxy component of stress tensor
+
+# Compute autocorrelation function for viscosity (Green-Kubo method)
+fix ave_stress all ave/correlate 10 100 1000 v_pxy file ${results_dir}/stress_correlation.txt ave running
+fix ave_stress all ave/correlate 10 100 1000 v_pxy file C:/Users/monica/Desktop/lammps_tutorial/polymer_cyclic_loading/results/stress_correlation.txt ave running
+
+# -------------------- RUN SIMULATION --------------------
+
+velocity        all create 1.0 87287 loop geom
+fix             prod all nvt temp 1.0 1.0 0.5
+timestep        0.001
+thermo          1000
+thermo_style    custom step temp pe ke etotal
+run             10000
+Generated 0 of 1 mixed pair_coeff terms from geometric mixing rule
+Neighbor list info ...
+  update: every = 1 steps, delay = 5 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 1.42246
+  ghost atom cutoff = 1.8
+  binsize = 0.71123, bins = 43 43 43
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair lj/cut, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.947 | 4.947 | 4.947 Mbytes
+   Step          Temp          PotEng         KinEng         TotEng    
+         0   1              1.9207578      1.4986364      3.4193942    
+      1000   0.98470069     1.8558204      1.4757083      3.3315287    
+      2000   1.0128897      1.8605005      1.5179534      3.3784539    
+      3000   0.96854436     1.8456559      1.4514958      3.2971517    
+      4000   1.0055377      1.8593049      1.5069353      3.3662403    
+      5000   1.0010392      1.8474465      1.5001937      3.3476402    
+      6000   1.0004265      1.8585706      1.4992755      3.3578461    
+      7000   1.0188524      1.8454772      1.5268893      3.3723665    
+      8000   0.99166819     1.857534       1.48615        3.343684     
+      9000   1.0292681      1.8525226      1.5424985      3.3950212    
+     10000   0.97487848     1.8220437      1.4609883      3.2830321    
+Loop time of 0.54702 on 1 procs for 10000 steps with 1100 atoms
+
+Performance: 1579466.930 tau/day, 18280.867 timesteps/s, 20.109 Matom-step/s
+100.0% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0.073519   | 0.073519   | 0.073519   |   0.0 | 13.44
+Bond    | 0.028656   | 0.028656   | 0.028656   |   0.0 |  5.24
+Neigh   | 0.096307   | 0.096307   | 0.096307   |   0.0 | 17.61
+Comm    | 0.044164   | 0.044164   | 0.044164   |   0.0 |  8.07
+Output  | 0.002651   | 0.002651   | 0.002651   |   0.0 |  0.48
+Modify  | 0.23699    | 0.23699    | 0.23699    |   0.0 | 43.32
+Other   |            | 0.06473    |            |       | 11.83
+
+Nlocal:           1100 ave        1100 max        1100 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:            499 ave         499 max         499 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:            201 ave         201 max         201 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 201
+Ave neighs/atom = 0.18272727
+Ave special neighs/atom = 0.53454545
+Neighbor list builds = 279
+Dangerous builds = 0
+unfix           prod
+
+# Write final configuration for analysis
+write_data      ${results_dir}/final_polymer_data.dat pair ij
+write_data      C:/Users/monica/Desktop/lammps_tutorial/polymer_cyclic_loading/results/final_polymer_data.dat pair ij
+System init for write_data ...
+Generated 0 of 1 mixed pair_coeff terms from geometric mixing rule
+
+print "Production run complete. Final configuration saved as final_polymer_data.dat"
+Production run complete. Final configuration saved as final_polymer_data.dat
+Total wall time: 0:00:00

@@ -1,0 +1,66 @@
+# in.production.lammps
+# Production run on the solvated polymer system (e.g., cyclic loading).
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      bond
+
+special_bonds   lj 0 1 1
+
+# Define pair style BEFORE reading data
+pair_style      lj/cut 1.12246
+bond_style      fene
+
+# Read the solvated configuration FIRST
+read_data       C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\data\solvated_polymer_data.dat
+
+# Define bond coefficients AFTER reading the simulation box
+bond_coeff      1 30.0 1.5 1.0 1.0
+
+# Define pair coefficients for polymer-polymer, solvent-solvent, and polymer-solvent
+pair_coeff      1 1 1.0 1.0 1.12246
+pair_coeff      2 2 1.0 1.0 1.12246
+pair_coeff      1 2 1.0 1.0 1.12246
+
+# Fix communication cutoff issue (increase to 1.8)
+comm_modify cutoff 1.8
+
+neighbor        0.3 bin
+neigh_modify    delay 5 every 1 check yes
+
+# -------------------- OUTPUT TO RESULTS FOLDER --------------------
+
+# Define output directory
+variable results_dir string "C:/Users/monica/Desktop/lammps_tutorial/polymer_cyclic_loading/results"
+
+# Compute End-to-End Distance for Polymer Chains
+compute end2end all bond/local dist
+fix ave_end all ave/histo 100 10 1000 0.0 10.0 100 c_end2end mode vector file ${results_dir}/end_to_end_distribution.txt
+
+# Compute Radius of Gyration using chunk method (per molecule)
+compute chunk_mol all chunk/atom molecule
+compute rg all gyration/chunk chunk_mol
+
+# Print radius of gyration for each chunk (molecule) into a file
+fix ave_rg all ave/time 100 10 1000 c_rg file ${results_dir}/radius_of_gyration.txt mode vector
+
+# Compute Stress Autocorrelation for Rheological Properties
+compute press all pressure thermo_temp
+variable pxy equal c_press[4]
+fix ave_stress all ave/correlate 10 100 1000 v_pxy file ${results_dir}/stress_correlation.txt ave running
+
+# -------------------- RUN SIMULATION --------------------
+
+velocity        all create 1.0 87287 loop geom
+fix             prod all nvt temp 1.0 1.0 0.5
+timestep        0.001
+thermo          1000
+thermo_style    custom step temp pe ke etotal
+run             500000
+unfix           prod
+
+# Write final configuration for analysis
+write_data      ${results_dir}/final_polymer_data.dat pair ij
+
+print "Production run complete. Final configuration saved as final_polymer_data.dat"

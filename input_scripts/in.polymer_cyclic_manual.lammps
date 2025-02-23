@@ -1,0 +1,86 @@
+# in.polymer_cyclic_manual.lammps
+# LAMMPS input script for cyclic loading via manual box deformation.
+# This script generates output for:
+#   - Stress–strain data (box x-dimension, stress, and total potential energy)
+#   - Atom dump data (for later analysis of void fraction and chain metrics)
+#   - Approximate entropy generation via changes in potential energy
+#
+# A final message is printed so you can check the runtime in the terminal.
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      bond
+
+# --------------------------------------------------
+# 1. Define Potential Styles & Interactions
+# --------------------------------------------------
+pair_style      lj/cut 1.12246
+bond_style      fene
+
+# Read the equilibrated data file (ensure it exists in the data folder)
+read_data       C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\data\equilibrated_polymer_data.dat
+
+# Optionally override coefficients if necessary
+pair_coeff      * * 1.0 1.0 1.12246
+bond_coeff      1 30.0 1.5 1.0 1.0
+
+neighbor        0.3 bin
+neigh_modify    delay 5 every 1 check yes
+
+# --------------------------------------------------
+# 2. Thermostat & Compute Definitions
+# --------------------------------------------------
+fix nvt all nvt temp 1.0 1.0 0.5
+
+# Create a compute for per-atom potential energy, then reduce to total potential energy.
+compute peAtom all pe/atom
+compute totPE all reduce sum c_peAtom
+
+# --------------------------------------------------
+# 3. Thermo Output & Dump Settings
+# --------------------------------------------------
+# Output thermo data every 100 steps: prints step, lx, pxx.
+thermo          100
+thermo_style    custom step lx pxx
+
+# Dump atom positions every 1000 steps to a text file.
+dump dump_all all custom 1000 C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\results\dump.lammpstrj id type x y z
+
+# --------------------------------------------------
+# 4. Stress–Strain Data Output using fix ave/time
+# --------------------------------------------------
+# Define variables to capture the current x-dimension and stress.
+variable Lx equal lx
+variable stress equal pxx
+
+# The fix ave/time command averages values every 100 steps and writes them to file.
+# It outputs: v_Lx, v_stress, and c_totPE.
+fix ave1 all ave/time 100 1 100 v_Lx v_stress c_totPE file C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\results\stress_strain.txt
+
+# --------------------------------------------------
+# 5. Cyclic Deformation Loop (Increased Runtime)
+# --------------------------------------------------
+# Assume the original x-dimension is 10.
+# Here, we perform 50 cycles. Each cycle consists of:
+#   (a) "Loading": Increase x-dimension by 5% (scale by 1.05) and run for 5000 timesteps.
+#   (b) "Unloading": Scale back to original (scale by ~0.95238) and run for another 5000 timesteps.
+variable cycle loop 50
+
+label loop_start
+  # Loading phase: increase x-dimension by 5%
+  change_box all x scale 1.05 remap
+  run 5000
+  
+  # Unloading phase: return x-dimension to original (1/1.05 ≈ 0.95238)
+  change_box all x scale 0.95238 remap
+  run 5000
+  
+next cycle
+
+# --------------------------------------------------
+# 6. Finalize & Completion Message
+# --------------------------------------------------
+write_data C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\data\final_polymer_data.dat
+
+print "Simulation complete. Check the results folder for dump.txt and stress_strain.txt."

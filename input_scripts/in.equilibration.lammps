@@ -1,0 +1,44 @@
+# in.equilibration.lammps
+# Equilibration of polymer-only system using FENE bonds,
+# with output of a trajectory file (equilibration.lammpstrj)
+# to visualize the equilibration process.
+
+units           lj
+dimension       3
+boundary        p p p
+atom_style      bond
+
+# Exclude 1-2 nonbonded interactions for polymers
+special_bonds   lj 0 1 1
+
+# Read the polymer-only data file
+read_data       C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\data\initial_polymer_data.dat
+
+pair_style      lj/cut 1.12246
+bond_style      fene
+bond_coeff      1 30.0 1.5 1.0 1.0
+pair_coeff      1 1 1.0 1.0 1.12246
+
+neighbor        0.3 bin
+neigh_modify    delay 5 every 1 check yes
+
+# Output a trajectory file every 1000 timesteps for visualization.
+dump equil_dump all custom 1000 C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\results\equilibration.lammpstrj id type x y z
+
+# Initialize velocities and equilibrate using NVT thermostat
+velocity        all create 1.0 87287 loop geom
+fix             equil all nvt temp 1.0 1.0 0.5
+timestep        0.001
+thermo          1000
+thermo_style    custom step temp pe ke etotal
+
+run             1000000
+unfix           equil
+
+# Stop dumping once equilibration is done.
+undump equil_dump
+
+# Write out the final equilibrated configuration for later production runs.
+write_data      C:\Users\monica\Desktop\lammps_tutorial\polymer_cyclic_loading\data\equilibrated_polymer_data.dat
+
+print "Equilibration complete. Equilibration trajectory saved as equilibration.lammpstrj and configuration as equilibrated_polymer_data.dat."
